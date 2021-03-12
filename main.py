@@ -17,6 +17,7 @@ class Viewport:
 
 def launch():
     vp = Viewport()
+    vp.display()
 
 
 if __name__ == "__main__":
