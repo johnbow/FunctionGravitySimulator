@@ -15,11 +15,14 @@ class Ball:
 
 class Viewport:
 
-    def __init__(self, parser, size=(600, 400), initial="0.1*x^2", limits=(-10, 10, -1, 19)):
+    def __init__(self, parser, size=(600, 400), initial="0.1*x^2", limits=(-10, 10, -1, 14)):
         self.parser = parser
         self.size = size
         self.limits = limits
         self.current_function = None
+        self.zoom_pressed = False
+        self.orig_press_zoom = None
+        self.orig_release_zoom = None
         self.ax = None
         self.fig = None
         self.anim = None
@@ -76,6 +79,18 @@ class Viewport:
     def connect_events(self):
         self.text_box.connect_event("key_release_event", self.custom_key_release)
         self.fig.canvas.mpl_connect("button_press_event", self.new_ball)
+        self.orig_press_zoom = self.fig.canvas.manager.toolbar.press_zoom
+        self.fig.canvas.manager.toolbar.press_zoom = self.press_zoom
+        self.orig_release_zoom = self.fig.canvas.manager.toolbar.release_zoom
+        self.fig.canvas.manager.toolbar.release_zoom = self.release_zoom
+
+    def press_zoom(self, event):
+        self.zoom_pressed = True
+        return self.orig_press_zoom(event)
+
+    def release_zoom(self, event):
+        self.zoom_pressed = False
+        return self.orig_release_zoom(event)
 
     def custom_key_release(self, event):
         # workaround of ^-key matplotlib bug:
@@ -97,14 +112,14 @@ class Viewport:
         plt.show()
 
     def new_ball(self, event):
-        if event.inaxes is not self.ax:
+        if event.inaxes is not self.ax or event.button != 1 or self.zoom_pressed:
             return
         self.add_ball(event.xdata, event.ydata)
 
     def add_ball(self, x, y):
         ball = Ball(np.array((x, y)), self.ball_radius)
         self.balls.append(ball)
-        ball.shape = plt.Circle(ball.pos, ball.radius)
+        ball.shape = plt.Circle(ball.pos, ball.radius, edgecolor="black")
         self.ax.add_artist(ball.shape)
         self.ball_shapes.append(ball.shape)
 
