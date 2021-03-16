@@ -29,6 +29,10 @@ class Ball:
         self.pos = new_pos
         self.shape.set_center(self.pos)
 
+    def increase_radius_by(self, off):
+        self.radius += off
+        self.shape.set_radius(self.radius)
+
     def move(self, v):
         self.pos += v
         self.shape.set_center(self.pos)
@@ -65,13 +69,14 @@ class Viewport:
         self.line = None
         self.button_pressed = False
         self.dragged_ball = None
+        self.resize_ball_pressed = False
 
         self.last_drag_pos = np.array((0.0, 0.0))
         self.last_drag_time = 0     # in nanoseconds
         self.drag_sling_factor = 7.0
         self.bounce_timeout = 1    # in frames
         self.terminal_velocity = -1.0
-        self.bounce_factor = 0.9
+        self.bounce_factor = 1.2
         self.fps = 40
         self.gravity = 1.0      # in coord-units per second
         self.pixel_size = (800, 600)
@@ -81,6 +86,7 @@ class Viewport:
         self.ball_radius = 0.5          # in coord-units
         self.line_color = "red"
         self.title = "Balls on functions - Simulation"
+        self.resize_ball_increase = 0.05   # in coord-units per frame
 
         self.balls = []
         self.ball_shapes = []
@@ -89,6 +95,9 @@ class Viewport:
         self.setup_line_data()
 
     def update(self, frame):
+        if self.resize_ball_pressed:
+            self.dragged_ball.increase_radius_by(self.resize_ball_increase)
+
         g_acceleration = self.gravity / self.fps
         for i, ball in enumerate(self.balls):
             if not ball.active:
@@ -240,7 +249,10 @@ class Viewport:
         plt.show()
 
     def new_ball(self, event):
-        if event.inaxes is not self.ax or event.button != 1 or self.zoom_pressed or self.pan_pressed:
+        if event.inaxes is not self.ax or self.zoom_pressed or self.pan_pressed:
+            return
+        if event.button != 1 and self.button_pressed:
+            self.resize_ball_pressed = True
             return
         self.last_drag_time = time_ns()
         self.last_drag_pos = np.array((event.xdata, event.ydata))
@@ -262,7 +274,10 @@ class Viewport:
         self.dragged_ball.set_pos(self.last_drag_pos)
 
     def add_ball(self, event):
-        if not self.button_pressed or event.button != 1:
+        if not self.button_pressed:
+            return
+        if event.button != 1:
+            self.resize_ball_pressed = False
             return
         if not event.inaxes:
             self.dragged_ball.shape.remove()
@@ -273,6 +288,7 @@ class Viewport:
                                                self.dragged_ball.velocity,
                                                -self.terminal_velocity)
             self.balls.append(self.dragged_ball)
+        self.resize_ball_pressed = False
         self.button_pressed = False
         self.dragged_ball = None
 
