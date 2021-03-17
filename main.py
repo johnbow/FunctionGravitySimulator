@@ -1,4 +1,5 @@
 from time import time_ns
+from itertools import combinations
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.widgets import TextBox
@@ -23,7 +24,6 @@ class Ball:
         self.shape = None
         self.velocity = np.array((0.0, 0.0))
         self.bounce_timeout = 0
-        self.active = True
 
     def set_pos(self, new_pos):
         self.pos = new_pos
@@ -76,7 +76,8 @@ class Viewport:
         self.drag_sling_factor = 7.0
         self.bounce_timeout = 1    # in frames
         self.terminal_velocity = -1.0
-        self.bounce_factor = 1.2
+        self.bounce_factor = 0.9
+        self.ball_collision_factor = 0.5
         self.fps = 40
         self.gravity = 1.0      # in coord-units per second
         self.pixel_size = (800, 600)
@@ -100,21 +101,42 @@ class Viewport:
 
         g_acceleration = self.gravity / self.fps
         for i, ball in enumerate(self.balls):
-            if not ball.active:
-                continue
             self.apply_physics(ball, g_acceleration)
             if ball.bounce_timeout > 0:
                 ball.bounce_timeout -= 1
             else:
                 self.check_ball_on_function(ball)
                 self.check_in_borders(ball, i)
-        # TODO: check ball collisions
+        # check ball collisions
+        for b1, b2 in combinations(self.balls, 2):
+            if b1.dist(b2) <= b1.radius + b2.radius:
+                self.ball_collision(b1, b2)
         return self.line, *self.ball_shapes
 
     def apply_physics(self, ball, g_accel):
         ball.velocity[1] -= g_accel
         ball.velocity[1] = max(ball.velocity[1], self.terminal_velocity)
         ball.apply_physics()
+
+    def ball_collision(self, b1, b2):
+        # mirror velocities and apply to position
+        tangent = -1 / ((b1.pos[1] - b2.pos[1]) / (b1.pos[0] - b2.pos[0]))
+        alpha2 = 2 * np.arctan(tangent)
+        mirror = np.array([[np.cos(alpha2), np.sin(alpha2)],
+                           [np.sin(alpha2), -np.cos(alpha2)]])
+        b1.velocity = np.dot(b1.velocity, mirror) * self.ball_collision_factor
+        b2.velocity = np.dot(b2.velocity, mirror) * self.ball_collision_factor
+        b1.apply_physics()
+        b2.apply_physics()
+
+        # set balls outside of each other
+        dst = b1.dist(b2)
+        if dst < b1.radius + b2.radius:
+            diff = b1.radius + b2.radius - dst
+            b = b1 if np.linalg.norm(b1.velocity) > np.linalg.norm(b2.velocity) else b2
+            v = b1.pos - b2.pos if b is b1 else b2.pos - b1.pos
+            b.move(v / np.linalg.norm(v) * diff)
+            b.velocity[1] *= self.bounce_factor
 
     def check_in_borders(self, ball, i):
         if not (self.limits[0] - ball.radius <= ball.pos[0] <= self.limits[1] + ball.radius) \
@@ -152,11 +174,6 @@ class Viewport:
         alpha = np.arctan(-1 / tangent)
         dv = np.array((np.cos(alpha), np.sin(alpha))) * -np.sign(tangent)
         ball.set_pos(a + ball.radius * dv)
-        self.check_deactivation(ball)
-
-    def check_deactivation(self, ball):
-        if (np.log10(ball.velocity) < (-3, -1.5)).all():
-            ball.active = False
 
     def set_function(self, expr):
         try:
@@ -194,7 +211,6 @@ class Viewport:
             return
         self.set_function(expression)
         self.update_line_data()
-        self.set_all_active()
 
     def connect_events(self):
         self.text_box.connect_event("key_release_event", self.custom_key_release)
@@ -251,8 +267,9 @@ class Viewport:
     def new_ball(self, event):
         if event.inaxes is not self.ax or self.zoom_pressed or self.pan_pressed:
             return
-        if event.button != 1 and self.button_pressed:
-            self.resize_ball_pressed = True
+        if event.button != 1:
+            if self.button_pressed:
+                self.resize_ball_pressed = True
             return
         self.last_drag_time = time_ns()
         self.last_drag_pos = np.array((event.xdata, event.ydata))
@@ -296,10 +313,6 @@ class Viewport:
         self.balls[index].shape.remove()
         del self.balls[index]
         del self.ball_shapes[index]
-
-    def set_all_active(self):
-        for ball in self.balls:
-            ball.active = True
 
 
 def launch():
