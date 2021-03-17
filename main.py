@@ -182,7 +182,7 @@ class Viewport:
     def set_function(self, expr):
         try:
             f = self.parser.parse(expr, name="f")
-            assert len(f.var) <= 1
+            assert len(f.var) == 1
             self.current_function = f
         except (ParserError, AssertionError):
             self.text_box.set_val("invalid")
