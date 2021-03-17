@@ -2,7 +2,7 @@ from time import time_ns
 from itertools import combinations
 import numpy as np
 from matplotlib import pyplot as plt
-from matplotlib.widgets import TextBox
+from matplotlib.widgets import TextBox, Slider, Button
 from matplotlib.animation import FuncAnimation
 from eq.parsing import EqParser, ParserError
 
@@ -64,6 +64,8 @@ class Viewport:
         self.fig = None
         self.anim = None
         self.text_box = None
+        self.bounce_slider = None
+        self.delete_balls_button = None
         self.suppress_submit = False
         self.x_data, self.y_data = None, None
         self.line = None
@@ -75,6 +77,8 @@ class Viewport:
         self.last_drag_time = 0     # in nanoseconds
         self.drag_sling_factor = 7.0
         self.bounce_timeout = 1    # in frames
+        self.bounce_min = 0.1
+        self.bounce_max = 1.8
         self.terminal_velocity = -1.0
         self.bounce_factor = 0.9
         self.ball_collision_factor = 0.5
@@ -200,9 +204,21 @@ class Viewport:
         self.ax.set_aspect(1)
         plt.xlim(self.limits[:2])
         plt.ylim(self.limits[2:])
-        axbox = self.fig.add_axes([0.15, 0.05, 0.7, 0.06])
-        self.text_box = TextBox(axbox, "Plotten: ", initial=initial)
+        text_ax = self.fig.add_axes([0.15, 0.07, 0.7, 0.06])
+        self.text_box = TextBox(text_ax, "plot: ", initial=initial)
         self.text_box.on_submit(self.submit)
+        bounce_ax = self.fig.add_axes([0.15, 0.02, 0.4, 0.03])
+        self.bounce_slider = Slider(bounce_ax, "bounce: ",
+                                    valmin=self.bounce_min,
+                                    valmax=self.bounce_max,
+                                    valinit=self.bounce_factor,
+                                    valstep=0.05)
+        self.bounce_slider.on_changed(self.set_bounce)
+        delete_balls_ax = self.fig.add_axes([0.65, 0.02, 0.2, 0.03])
+        self.delete_balls_button = Button(delete_balls_ax, "delete balls",
+                                          color="#CC1111",
+                                          hovercolor="#FF0000")
+        self.delete_balls_button.on_clicked(self.remove_all_balls)
         self.connect_events()
 
     def submit(self, expression):
@@ -314,6 +330,12 @@ class Viewport:
         del self.balls[index]
         del self.ball_shapes[index]
 
+    def remove_all_balls(self, event=None):
+        while self.balls:
+            self.remove_ball(-1)
+
+    def set_bounce(self, val):
+        self.bounce_factor = val
 
 def launch():
     parser = EqParser()
